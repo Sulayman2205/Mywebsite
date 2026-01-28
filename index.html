@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Departmental Store</title>
+    <link href="/bootstrap-5.0.2-dist/css/bootstrap.css" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background: #d70101;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        main {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* CART SIDEBAR */
+        .cart-sidebar {
+            width: 300px;
+            background: white;
+            border-left: 2px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .cart-header {
+            background: #d70101;
+            color: white;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .cart-items {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .cart-item-preview {
+            background: #f9f9f9;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        .cart-item-preview:hover {
+            background: #f0f0f0;
+        }
+
+        .cart-item-name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .cart-item-qty {
+            color: #666;
+            margin-left: 10px;
+        }
+
+        .cart-footer {
+            padding: 15px;
+            border-top: 2px solid #ddd;
+        }
+
+        .empty-cart {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        /* PRODUCT GRID */
+        #productGrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .productCard {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            cursor: pointer;
+        }
+
+        .productCard:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        }
+
+        .out-of-stock {
+            color: red;
+            font-weight: bold;
+        }
+
+        /* MODAL */
+        #productModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #modalContent {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+        }
+
+        #closeModal {
+            float: right;
+            cursor: pointer;
+            font-weight: bold;
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h2>Departmental Store</h2>
+
+    <!-- ADMIN LOGIN -->
+    <div>
+        <button type="button" class="btn btn-light btn-sm" onclick="openAdminPanel()">
+            🔐 Admin Panel
+        </button>
+    </div>
+</header>
+
+<div class="main-container">
+    <main>
+        <!-- PRODUCTS ONLY -->
+        <div id="productGrid"></div>
+    </main>
+
+    <!-- CART SIDEBAR -->
+    <div class="cart-sidebar">
+        <div class="cart-header">
+            🛒 Your Cart
+        </div>
+        <div class="cart-items" id="cartPreview">
+            <div class="empty-cart">Your cart is empty</div>
+        </div>
+        <div class="cart-footer">
+            <button class="btn btn-success w-100" onclick="openCartPage()">
+                Proceed to Checkout
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- PRODUCT DETAILS MODAL -->
+<div id="productModal">
+    <div id="modalContent">
+        <span id="closeModal" onclick="closeModal()">X</span>
+        <h4 id="modalName"></h4>
+        <p><strong>Category:</strong> <span id="modalCategory"></span></p>
+        <p><strong>Brand:</strong> <span id="modalBrand"></span></p>
+        <p><strong>Available:</strong> <span id="modalQty"></span></p>
+        <p><strong>Expiry:</strong> <span id="modalExpiry"></span></p>
+    </div>
+</div>
+
+<script>
+    const customerId = 1;
+    let products = [];
+
+    // ---------------- LOAD PRODUCTS ----------------
+    async function loadProducts() {
+        const res = await fetch("/mart/products");
+        products = await res.json();
+
+        const grid = document.getElementById("productGrid");
+        grid.innerHTML = "";
+
+        products.forEach(p => {
+            const card = document.createElement("div");
+            card.className = "productCard";
+
+            card.innerHTML = `
+                <strong>${p.ProductName}</strong><br>
+                ${p.QuantityInStock <= 0
+                ? '<span class="out-of-stock">Out of Stock</span>'
+                : 'Qty: ' + p.QuantityInStock}
+                <br>
+                ${p.QuantityInStock > 0
+                ? `<button type="button"
+                              class="btn btn-primary btn-sm mt-2"
+                              onclick="addToCart(${p.ProductID}, event)">
+                            Add to Cart
+                       </button>`
+                : ""}
+            `;
+
+            card.onclick = () => showDetails(p);
+            grid.appendChild(card);
+        });
+    }
+
+    // ---------------- LOAD CART PREVIEW ----------------
+    async function loadCartPreview() {
+        const res = await fetch(`/mart/shoppingcartitem?customerId=${customerId}`);
+        const items = await res.json();
+
+        const preview = document.getElementById("cartPreview");
+        preview.innerHTML = "";
+
+        if (items.length === 0) {
+            preview.innerHTML = '<div class="empty-cart">Your cart is empty</div>';
+            return;
+        }
+
+        for (const item of items) {
+            const productRes = await fetch(`/mart/products/${item.ProductID}`);
+            const product = await productRes.json();
+
+            const div = document.createElement("div");
+            div.className = "cart-item-preview";
+            div.innerHTML = `
+                <span class="cart-item-name">${product[0].ProductName}</span>
+                <span class="cart-item-qty">x${item.Quantity}</span>
+            `;
+            preview.appendChild(div);
+        }
+    }
+
+    // ---------------- PRODUCT DETAILS ----------------
+    function showDetails(p) {
+        document.getElementById("productModal").style.display = "flex";
+        document.getElementById("modalName").innerText = p.ProductName;
+        document.getElementById("modalCategory").innerText = p.Category;
+        document.getElementById("modalBrand").innerText = p.Brand;
+        document.getElementById("modalQty").innerText = p.QuantityInStock;
+        document.getElementById("modalExpiry").innerText = p.ExpiryDate || "N/A";
+    }
+
+    function closeModal() {
+        document.getElementById("productModal").style.display = "none";
+    }
+
+    // ---------------- CART ACTIONS ----------------
+    async function addToCart(productId, event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        try {
+            await fetch(`/mart/cart/add?customerId=${customerId}&productId=${productId}&qty=1`);
+            alert("Item added to cart");
+            await loadProducts();
+            await loadCartPreview(); // Update cart preview
+        } catch (err) {
+            alert("Failed to add item: " + err.message);
+        }
+    }
+
+    // ---------------- OPEN CART PAGE ----------------
+    function openCartPage() {
+        window.open("/cart.html", "_blank");
+    }
+
+    // ---------------- OPEN ADMIN PANEL ----------------
+    function openAdminPanel() {
+        window.open("/admin-login.html", "_blank");
+    }
+
+    // ---------------- REFRESH CART PERIODICALLY ----------------
+    // This helps sync the cart if user makes changes in the cart tab
+    setInterval(loadCartPreview, 3000); // Refresh every 3 seconds
+
+    // INIT
+    loadProducts();
+    loadCartPreview();
+</script>
+
+</body>
+</html>
